@@ -1,0 +1,6 @@
+/target
+Cargo.lock
+logs/
+*.db
+api-key.config
+.env
