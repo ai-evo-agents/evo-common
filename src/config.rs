@@ -66,6 +66,14 @@ impl GatewayConfig {
     pub fn to_toml(&self) -> Result<String, toml::ser::Error> {
         toml::to_string_pretty(self)
     }
+
+    pub fn from_json(content: &str) -> Result<Self, serde_json::Error> {
+        serde_json::from_str(content)
+    }
+
+    pub fn to_json(&self) -> Result<String, serde_json::Error> {
+        serde_json::to_string_pretty(self)
+    }
 }
 
 impl AgentConfig {
@@ -119,7 +127,7 @@ provider_type = "open_ai_compatible"
     }
 
     #[test]
-    fn roundtrip_gateway_config() {
+    fn roundtrip_gateway_config_toml() {
         let config = GatewayConfig {
             server: ServerConfig {
                 host: "127.0.0.1".into(),
@@ -139,5 +147,41 @@ provider_type = "open_ai_compatible"
         let parsed = GatewayConfig::from_toml(&toml_str).unwrap();
         assert_eq!(parsed.server.port, 3000);
         assert_eq!(parsed.providers[0].api_key_envs.len(), 0);
+    }
+
+    #[test]
+    fn roundtrip_gateway_config_json() {
+        let config = GatewayConfig {
+            server: ServerConfig {
+                host: "0.0.0.0".into(),
+                port: 8080,
+            },
+            providers: vec![
+                ProviderConfig {
+                    name: "openai".into(),
+                    base_url: "https://api.openai.com/v1".into(),
+                    api_key_envs: vec!["OPENAI_API_KEY".into()],
+                    enabled: true,
+                    provider_type: ProviderType::OpenAiCompatible,
+                    extra_headers: HashMap::new(),
+                    rate_limit: None,
+                },
+                ProviderConfig {
+                    name: "anthropic".into(),
+                    base_url: "https://api.anthropic.com/v1".into(),
+                    api_key_envs: vec!["ANTHROPIC_API_KEY".into()],
+                    enabled: true,
+                    provider_type: ProviderType::Anthropic,
+                    extra_headers: HashMap::new(),
+                    rate_limit: None,
+                },
+            ],
+        };
+        let json_str = config.to_json().unwrap();
+        let parsed = GatewayConfig::from_json(&json_str).unwrap();
+        assert_eq!(parsed.server.port, 8080);
+        assert_eq!(parsed.providers.len(), 2);
+        assert_eq!(parsed.providers[1].provider_type, ProviderType::Anthropic);
+        assert_eq!(parsed.providers[0].api_key_envs[0], "OPENAI_API_KEY");
     }
 }
