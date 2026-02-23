@@ -97,6 +97,77 @@ pub enum PipelineStage {
     SkillManage,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TaskStatus {
+    Pending,
+    InProgress,
+    Completed,
+    Failed,
+    Cancelled,
+}
+
+// ─── Task management messages ────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskCreate {
+    pub task_type: String,
+    #[serde(default)]
+    pub agent_id: Option<String>,
+    #[serde(default = "default_empty_object")]
+    pub payload: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskUpdate {
+    pub task_id: String,
+    #[serde(default)]
+    pub status: Option<TaskStatus>,
+    #[serde(default)]
+    pub agent_id: Option<String>,
+    #[serde(default)]
+    pub payload: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskGet {
+    pub task_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskList {
+    #[serde(default = "default_task_limit")]
+    pub limit: u32,
+    #[serde(default)]
+    pub status: Option<TaskStatus>,
+    #[serde(default)]
+    pub agent_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskDelete {
+    pub task_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskRecord {
+    pub id: String,
+    pub task_type: String,
+    pub status: String,
+    pub agent_id: String,
+    pub payload: serde_json::Value,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+fn default_task_limit() -> u32 {
+    50
+}
+
+fn default_empty_object() -> serde_json::Value {
+    serde_json::Value::Object(serde_json::Map::new())
+}
+
 pub mod events {
     pub const AGENT_REGISTER: &str = "agent:register";
     pub const AGENT_STATUS: &str = "agent:status";
@@ -105,6 +176,17 @@ pub mod events {
     pub const KING_COMMAND: &str = "king:command";
     pub const KING_CONFIG_UPDATE: &str = "king:config_update";
     pub const PIPELINE_NEXT: &str = "pipeline:next";
+
+    // Task management events
+    pub const TASK_CREATE: &str = "task:create";
+    pub const TASK_UPDATE: &str = "task:update";
+    pub const TASK_GET: &str = "task:get";
+    pub const TASK_LIST: &str = "task:list";
+    pub const TASK_DELETE: &str = "task:delete";
+    pub const TASK_CHANGED: &str = "task:changed";
+
+    // Rooms
+    pub const ROOM_KERNEL: &str = "kernel";
 }
 
 #[cfg(test)]
@@ -134,5 +216,50 @@ mod tests {
         let json = serde_json::to_string(&msg).unwrap();
         let deserialized: PipelineNext = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized.stage, PipelineStage::Building);
+    }
+
+    #[test]
+    fn serialize_task_status() {
+        let status = TaskStatus::InProgress;
+        let json = serde_json::to_string(&status).unwrap();
+        assert_eq!(json, r#""in_progress""#);
+        let de: TaskStatus = serde_json::from_str(&json).unwrap();
+        assert_eq!(de, TaskStatus::InProgress);
+    }
+
+    #[test]
+    fn serialize_task_create() {
+        let msg = TaskCreate {
+            task_type: "build".into(),
+            agent_id: Some("building-001".into()),
+            payload: serde_json::json!({"skill_id": "web-search"}),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        let de: TaskCreate = serde_json::from_str(&json).unwrap();
+        assert_eq!(de.task_type, "build");
+        assert_eq!(de.agent_id.unwrap(), "building-001");
+    }
+
+    #[test]
+    fn deserialize_task_list_defaults() {
+        let msg: TaskList = serde_json::from_str("{}").unwrap();
+        assert_eq!(msg.limit, 50);
+        assert!(msg.status.is_none());
+        assert!(msg.agent_id.is_none());
+    }
+
+    #[test]
+    fn serialize_task_update_partial() {
+        let msg = TaskUpdate {
+            task_id: "abc-123".into(),
+            status: Some(TaskStatus::Completed),
+            agent_id: None,
+            payload: None,
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        let de: TaskUpdate = serde_json::from_str(&json).unwrap();
+        assert_eq!(de.task_id, "abc-123");
+        assert_eq!(de.status, Some(TaskStatus::Completed));
+        assert!(de.agent_id.is_none());
     }
 }
