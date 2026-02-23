@@ -1,9 +1,9 @@
 use std::env;
 use std::path::PathBuf;
 use tracing_appender::non_blocking::WorkerGuard;
+use tracing_subscriber::EnvFilter;
 use tracing_subscriber::fmt;
 use tracing_subscriber::prelude::*;
-use tracing_subscriber::EnvFilter;
 
 const DEFAULT_LOG_DIR: &str = "./logs";
 const ENV_LOG_DIR: &str = "EVO_LOG_DIR";
@@ -29,12 +29,9 @@ pub fn init_logging(component: &str) -> WorkerGuard {
         .with_file(true)
         .with_line_number(true);
 
-    let stdout_layer = fmt::layer()
-        .with_target(true)
-        .with_thread_ids(false);
+    let stdout_layer = fmt::layer().with_target(true).with_thread_ids(false);
 
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info"));
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 
     tracing_subscriber::registry()
         .with(filter)

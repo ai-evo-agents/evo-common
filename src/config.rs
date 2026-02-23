@@ -123,7 +123,11 @@ provider_type = "open_ai_compatible"
         assert_eq!(config.providers.len(), 3);
         assert_eq!(config.providers[0].api_key_envs.len(), 2);
         assert_eq!(config.providers[1].provider_type, ProviderType::Anthropic);
-        assert!(config.providers[2].extra_headers.contains_key("HTTP-Referer"));
+        assert!(
+            config.providers[2]
+                .extra_headers
+                .contains_key("HTTP-Referer")
+        );
     }
 
     #[test]
