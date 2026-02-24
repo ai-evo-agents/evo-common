@@ -26,6 +26,8 @@ pub enum ProviderType {
     Cursor,
     /// Claude Code — spawns `claude` CLI subprocess in print mode.
     ClaudeCode,
+    /// Codex CLI — spawns `codex` CLI subprocess in exec mode.
+    CodexCli,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -214,6 +216,29 @@ provider_type = "open_ai_compatible"
         assert!(json_str.contains("\"claude_code\""));
         let parsed = GatewayConfig::from_json(&json_str).unwrap();
         assert_eq!(parsed.providers[0].provider_type, ProviderType::ClaudeCode);
+    }
+
+    #[test]
+    fn roundtrip_provider_type_codex_cli() {
+        let config = GatewayConfig {
+            server: ServerConfig {
+                host: "127.0.0.1".into(),
+                port: 8080,
+            },
+            providers: vec![ProviderConfig {
+                name: "codex-cli".into(),
+                base_url: String::new(),
+                api_key_envs: vec![],
+                enabled: false,
+                provider_type: ProviderType::CodexCli,
+                extra_headers: HashMap::new(),
+                rate_limit: None,
+            }],
+        };
+        let json_str = config.to_json().unwrap();
+        assert!(json_str.contains("\"codex_cli\""));
+        let parsed = GatewayConfig::from_json(&json_str).unwrap();
+        assert_eq!(parsed.providers[0].provider_type, ProviderType::CodexCli);
     }
 
     #[test]
