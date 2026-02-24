@@ -125,6 +125,8 @@ pub struct HealthCheck {
 }
 ```
 
+Note: Runners may include additional fields in the registration payload beyond the struct definition. For example, the `skills` field (a JSON array of skill names) is passed as untyped JSON alongside the typed `AgentRegister` fields. King extracts and persists these extra fields when handling `agent:register` events.
+
 #### Enums
 
 ```rust
