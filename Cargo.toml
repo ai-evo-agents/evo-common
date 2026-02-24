@@ -2,6 +2,12 @@
 name = "evo-common"
 version = "0.1.0"
 edition = "2024"
+description = "Shared types, protocols, and utilities for the Evo self-evolution agent system"
+license = "MIT"
+repository = "https://github.com/ai-evo-agents/evo-common"
+readme = "README.md"
+keywords = ["agents", "ai", "self-evolution"]
+categories = ["development-tools"]
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
