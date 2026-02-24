@@ -22,6 +22,8 @@ pub enum ProviderType {
     OpenAiCompatible,
     /// Anthropic Messages API — different auth headers and request format.
     Anthropic,
+    /// Cursor — spawns `cursor-agent` CLI subprocess instead of HTTP proxying.
+    Cursor,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -187,5 +189,28 @@ provider_type = "open_ai_compatible"
         assert_eq!(parsed.providers.len(), 2);
         assert_eq!(parsed.providers[1].provider_type, ProviderType::Anthropic);
         assert_eq!(parsed.providers[0].api_key_envs[0], "OPENAI_API_KEY");
+    }
+
+    #[test]
+    fn roundtrip_provider_type_cursor() {
+        let config = GatewayConfig {
+            server: ServerConfig {
+                host: "127.0.0.1".into(),
+                port: 8080,
+            },
+            providers: vec![ProviderConfig {
+                name: "cursor".into(),
+                base_url: String::new(),
+                api_key_envs: vec![],
+                enabled: false,
+                provider_type: ProviderType::Cursor,
+                extra_headers: HashMap::new(),
+                rate_limit: None,
+            }],
+        };
+        let json_str = config.to_json().unwrap();
+        assert!(json_str.contains("\"cursor\""));
+        let parsed = GatewayConfig::from_json(&json_str).unwrap();
+        assert_eq!(parsed.providers[0].provider_type, ProviderType::Cursor);
     }
 }
