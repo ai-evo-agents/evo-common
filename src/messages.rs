@@ -99,6 +99,27 @@ pub enum PipelineStage {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+pub enum PipelineRunStatus {
+    Running,
+    Completed,
+    Failed,
+    TimedOut,
+}
+
+/// Agent reports completion of a pipeline stage back to king.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PipelineStageResult {
+    pub run_id: String,
+    pub stage: PipelineStage,
+    pub agent_id: String,
+    pub status: PipelineRunStatus,
+    pub artifact_id: String,
+    pub output: serde_json::Value,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
 pub enum TaskStatus {
     Pending,
     InProgress,
@@ -185,8 +206,12 @@ pub mod events {
     pub const TASK_DELETE: &str = "task:delete";
     pub const TASK_CHANGED: &str = "task:changed";
 
+    // Pipeline coordination events
+    pub const PIPELINE_STAGE_RESULT: &str = "pipeline:stage_result";
+
     // Rooms
     pub const ROOM_KERNEL: &str = "kernel";
+    pub const ROOM_ROLE_PREFIX: &str = "role:";
 }
 
 #[cfg(test)]
@@ -246,6 +271,55 @@ mod tests {
         assert_eq!(msg.limit, 50);
         assert!(msg.status.is_none());
         assert!(msg.agent_id.is_none());
+    }
+
+    #[test]
+    fn serialize_pipeline_run_status() {
+        let status = PipelineRunStatus::Running;
+        let json = serde_json::to_string(&status).unwrap();
+        assert_eq!(json, r#""running""#);
+        let de: PipelineRunStatus = serde_json::from_str(&json).unwrap();
+        assert_eq!(de, PipelineRunStatus::Running);
+
+        let timed_out = PipelineRunStatus::TimedOut;
+        let json = serde_json::to_string(&timed_out).unwrap();
+        assert_eq!(json, r#""timed_out""#);
+    }
+
+    #[test]
+    fn serialize_pipeline_stage_result() {
+        let result = PipelineStageResult {
+            run_id: "run-001".into(),
+            stage: PipelineStage::Learning,
+            agent_id: "learning-001".into(),
+            status: PipelineRunStatus::Completed,
+            artifact_id: "artifact-xyz".into(),
+            output: serde_json::json!({"candidates": 3}),
+            error: None,
+        };
+        let json = serde_json::to_string(&result).unwrap();
+        let de: PipelineStageResult = serde_json::from_str(&json).unwrap();
+        assert_eq!(de.run_id, "run-001");
+        assert_eq!(de.stage, PipelineStage::Learning);
+        assert_eq!(de.status, PipelineRunStatus::Completed);
+        assert!(de.error.is_none());
+    }
+
+    #[test]
+    fn serialize_pipeline_stage_result_with_error() {
+        let result = PipelineStageResult {
+            run_id: "run-002".into(),
+            stage: PipelineStage::Building,
+            agent_id: "building-001".into(),
+            status: PipelineRunStatus::Failed,
+            artifact_id: "".into(),
+            output: serde_json::Value::Null,
+            error: Some("build failed: missing dependency".into()),
+        };
+        let json = serde_json::to_string(&result).unwrap();
+        let de: PipelineStageResult = serde_json::from_str(&json).unwrap();
+        assert_eq!(de.status, PipelineRunStatus::Failed);
+        assert_eq!(de.error.unwrap(), "build failed: missing dependency");
     }
 
     #[test]
