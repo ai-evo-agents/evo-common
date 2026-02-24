@@ -13,7 +13,7 @@ This is a Rust library crate consumed by every component in the Evo system. It d
 | **evo-common** (this) | Shared types, protocol definitions, config structs, logging |
 | [evo-gateway](https://github.com/ai-evo-agents/evo-gateway) | API aggregator (port 8080) unifying OpenAI, Anthropic, and local LLMs |
 | [evo-king](https://github.com/ai-evo-agents/evo-king) | Central orchestrator with Socket.IO server (port 3000), config lifecycle, Turso DB |
-| [evo-agents](https://github.com/ai-evo-agents/evo-agents) | Runner binary with kernel and user agent folders |
+| [evo-agents](https://github.com/ai-evo-agents/evo-agents) | Runner binary (kernel agents in separate repos) |
 
 ---
 
@@ -164,6 +164,25 @@ pub enum PipelineStage {
     Evaluation,
     SkillManage,
 }
+
+#[serde(rename_all = "snake_case")]
+pub enum PipelineRunStatus {
+    Running,
+    Completed,
+    Failed,
+    TimedOut,
+}
+
+// Agent reports completion of a pipeline stage back to king
+pub struct PipelineStageResult {
+    pub run_id: String,
+    pub stage: PipelineStage,
+    pub agent_id: String,
+    pub status: PipelineRunStatus,
+    pub artifact_id: String,
+    pub output: serde_json::Value,
+    pub error: Option<String>,
+}
 ```
 
 #### Event Name Constants
@@ -178,7 +197,12 @@ pub mod events {
     pub const AGENT_HEALTH: &str      = "agent:health";
     pub const KING_COMMAND: &str      = "king:command";
     pub const KING_CONFIG_UPDATE: &str = "king:config_update";
-    pub const PIPELINE_NEXT: &str     = "pipeline:next";
+    pub const PIPELINE_NEXT: &str          = "pipeline:next";
+    pub const PIPELINE_STAGE_RESULT: &str  = "pipeline:stage_result";
+
+    // Rooms
+    pub const ROOM_KERNEL: &str      = "kernel";
+    pub const ROOM_ROLE_PREFIX: &str  = "role:";
 }
 ```
 
@@ -303,6 +327,7 @@ Log files are written to `{log_dir}/{component}.YYYY-MM-DD.log` in JSON format. 
 | `king:command` | king -> runner | `KingCommand` |
 | `king:config_update` | king -> runner | `KingConfigUpdate` |
 | `pipeline:next` | king <-> runner | `PipelineNext` |
+| `pipeline:stage_result` | runner -> king | `PipelineStageResult` |
 
 All payloads are JSON-serialized using `serde_json`. Enum variants use `snake_case` serialization by default; `HttpMethod` uses `UPPERCASE`.
 
@@ -393,9 +418,7 @@ Add `evo-common` as a dependency in `Cargo.toml`:
 
 ```toml
 [dependencies]
-evo-common = { path = "../evo-common" }
-# or via git:
-# evo-common = { git = "https://github.com/ai-evo-agents/evo-common" }
+evo-common = "0.2"
 ```
 
 ### Logging initialization
