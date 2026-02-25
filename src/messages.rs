@@ -191,8 +191,139 @@ fn default_task_limit() -> u32 {
     50
 }
 
+fn default_memory_limit() -> u32 {
+    20
+}
+
 fn default_empty_object() -> serde_json::Value {
     serde_json::Value::Object(serde_json::Map::new())
+}
+
+// ─── Memory system types ────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MemoryScope {
+    System,
+    Agent,
+    Pipeline,
+    Skill,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MemoryCategory {
+    Case,
+    Pattern,
+    Fact,
+    Preference,
+    Resource,
+    Event,
+}
+
+/// A single tier entry (l0/l1/l2) for memory creation/update.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemoryTierEntry {
+    pub tier: String,
+    pub content: String,
+}
+
+/// Agent stores a memory into king.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemoryStore {
+    pub scope: MemoryScope,
+    pub category: MemoryCategory,
+    #[serde(default)]
+    pub key: String,
+    #[serde(default = "default_empty_object")]
+    pub metadata: serde_json::Value,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    #[serde(default)]
+    pub agent_id: String,
+    #[serde(default)]
+    pub run_id: String,
+    #[serde(default)]
+    pub skill_id: String,
+    #[serde(default)]
+    pub relevance_score: f64,
+    #[serde(default)]
+    pub tiers: Vec<MemoryTierEntry>,
+    #[serde(default)]
+    pub task_id: Option<String>,
+}
+
+/// Agent queries memories from king.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemoryQuery {
+    pub query: String,
+    #[serde(default)]
+    pub scope: Option<MemoryScope>,
+    #[serde(default)]
+    pub category: Option<MemoryCategory>,
+    #[serde(default)]
+    pub agent_id: Option<String>,
+    #[serde(default)]
+    pub tier: Option<String>,
+    #[serde(default)]
+    pub task_id: Option<String>,
+    #[serde(default = "default_memory_limit")]
+    pub limit: u32,
+}
+
+/// A single tier in a returned memory record.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemoryTierRecord {
+    pub id: String,
+    pub memory_id: String,
+    pub tier: String,
+    pub content: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// Serialized memory record returned in results.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemoryRecord {
+    pub id: String,
+    pub scope: String,
+    pub category: String,
+    pub key: String,
+    #[serde(default)]
+    pub tiers: Vec<MemoryTierRecord>,
+    #[serde(default = "default_empty_object")]
+    pub metadata: serde_json::Value,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    #[serde(default)]
+    pub agent_id: String,
+    #[serde(default)]
+    pub run_id: String,
+    #[serde(default)]
+    pub skill_id: String,
+    #[serde(default)]
+    pub relevance_score: f64,
+    #[serde(default)]
+    pub access_count: i64,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// King returns matching memories to an agent.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemoryResult {
+    pub memories: Vec<MemoryRecord>,
+    pub count: u32,
+}
+
+/// Broadcast when a memory is created, updated, or deleted.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemoryChanged {
+    pub action: String,
+    #[serde(default)]
+    pub memory: Option<MemoryRecord>,
+    #[serde(default)]
+    pub memory_id: Option<String>,
 }
 
 pub mod events {
@@ -218,6 +349,13 @@ pub mod events {
     // Debug events
     pub const DEBUG_PROMPT: &str = "debug:prompt";
     pub const DEBUG_RESPONSE: &str = "debug:response";
+
+    // Memory events
+    pub const MEMORY_STORE: &str = "memory:store";
+    pub const MEMORY_QUERY: &str = "memory:query";
+    pub const MEMORY_UPDATE: &str = "memory:update";
+    pub const MEMORY_DELETE: &str = "memory:delete";
+    pub const MEMORY_CHANGED: &str = "memory:changed";
 
     // Rooms
     pub const ROOM_KERNEL: &str = "kernel";
@@ -366,5 +504,75 @@ mod tests {
         let msg: TaskList = serde_json::from_str(r#"{"parent_id": "parent-001"}"#).unwrap();
         assert_eq!(msg.parent_id, Some("parent-001".to_string()));
         assert_eq!(msg.limit, 50);
+    }
+
+    #[test]
+    fn serialize_memory_scope() {
+        let scope = MemoryScope::Agent;
+        let json = serde_json::to_string(&scope).unwrap();
+        assert_eq!(json, r#""agent""#);
+        let de: MemoryScope = serde_json::from_str(&json).unwrap();
+        assert_eq!(de, MemoryScope::Agent);
+    }
+
+    #[test]
+    fn serialize_memory_category() {
+        let cat = MemoryCategory::Pattern;
+        let json = serde_json::to_string(&cat).unwrap();
+        assert_eq!(json, r#""pattern""#);
+        let de: MemoryCategory = serde_json::from_str(&json).unwrap();
+        assert_eq!(de, MemoryCategory::Pattern);
+    }
+
+    #[test]
+    fn serialize_memory_store() {
+        let msg = MemoryStore {
+            scope: MemoryScope::Agent,
+            category: MemoryCategory::Pattern,
+            key: "memory://agent/learning/api_pattern".into(),
+            metadata: serde_json::json!({"source": "pipeline"}),
+            tags: vec!["discovery".into(), "api".into()],
+            agent_id: "learning-001".into(),
+            run_id: "".into(),
+            skill_id: "".into(),
+            relevance_score: 0.85,
+            tiers: vec![
+                MemoryTierEntry {
+                    tier: "l0".into(),
+                    content: "API discovery pattern".into(),
+                },
+                MemoryTierEntry {
+                    tier: "l2".into(),
+                    content: "Full detailed content...".into(),
+                },
+            ],
+            task_id: None,
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        let de: MemoryStore = serde_json::from_str(&json).unwrap();
+        assert_eq!(de.scope, MemoryScope::Agent);
+        assert_eq!(de.category, MemoryCategory::Pattern);
+        assert_eq!(de.tiers.len(), 2);
+    }
+
+    #[test]
+    fn deserialize_memory_query_defaults() {
+        let msg: MemoryQuery = serde_json::from_str(r#"{"query": "api discovery"}"#).unwrap();
+        assert_eq!(msg.limit, 20);
+        assert!(msg.scope.is_none());
+        assert!(msg.task_id.is_none());
+    }
+
+    #[test]
+    fn serialize_memory_changed() {
+        let msg = MemoryChanged {
+            action: "created".into(),
+            memory: None,
+            memory_id: Some("mem-001".into()),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        let de: MemoryChanged = serde_json::from_str(&json).unwrap();
+        assert_eq!(de.action, "created");
+        assert_eq!(de.memory_id.unwrap(), "mem-001");
     }
 }
