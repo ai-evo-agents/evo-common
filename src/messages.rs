@@ -209,6 +209,10 @@ pub mod events {
     // Pipeline coordination events
     pub const PIPELINE_STAGE_RESULT: &str = "pipeline:stage_result";
 
+    // Debug events
+    pub const DEBUG_PROMPT: &str = "debug:prompt";
+    pub const DEBUG_RESPONSE: &str = "debug:response";
+
     // Rooms
     pub const ROOM_KERNEL: &str = "kernel";
     pub const ROOM_ROLE_PREFIX: &str = "role:";
