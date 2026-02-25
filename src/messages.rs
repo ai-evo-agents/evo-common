@@ -137,6 +137,8 @@ pub struct TaskCreate {
     pub agent_id: Option<String>,
     #[serde(default = "default_empty_object")]
     pub payload: serde_json::Value,
+    #[serde(default)]
+    pub parent_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -163,6 +165,8 @@ pub struct TaskList {
     pub status: Option<TaskStatus>,
     #[serde(default)]
     pub agent_id: Option<String>,
+    #[serde(default)]
+    pub parent_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -177,6 +181,8 @@ pub struct TaskRecord {
     pub status: String,
     pub agent_id: String,
     pub payload: serde_json::Value,
+    #[serde(default)]
+    pub parent_id: String,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -262,6 +268,7 @@ mod tests {
             task_type: "build".into(),
             agent_id: Some("building-001".into()),
             payload: serde_json::json!({"skill_id": "web-search"}),
+            parent_id: None,
         };
         let json = serde_json::to_string(&msg).unwrap();
         let de: TaskCreate = serde_json::from_str(&json).unwrap();
@@ -339,5 +346,25 @@ mod tests {
         assert_eq!(de.task_id, "abc-123");
         assert_eq!(de.status, Some(TaskStatus::Completed));
         assert!(de.agent_id.is_none());
+    }
+
+    #[test]
+    fn deserialize_task_create_with_parent_id() {
+        let msg: TaskCreate =
+            serde_json::from_str(r#"{"task_type": "subtask", "parent_id": "abc-123"}"#).unwrap();
+        assert_eq!(msg.parent_id, Some("abc-123".to_string()));
+    }
+
+    #[test]
+    fn deserialize_task_create_without_parent_id() {
+        let msg: TaskCreate = serde_json::from_str(r#"{"task_type": "test"}"#).unwrap();
+        assert!(msg.parent_id.is_none());
+    }
+
+    #[test]
+    fn deserialize_task_list_with_parent_id() {
+        let msg: TaskList = serde_json::from_str(r#"{"parent_id": "parent-001"}"#).unwrap();
+        assert_eq!(msg.parent_id, Some("parent-001".to_string()));
+        assert_eq!(msg.limit, 50);
     }
 }
