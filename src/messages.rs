@@ -326,6 +326,60 @@ pub struct MemoryChanged {
     pub memory_id: Option<String>,
 }
 
+// ─── Task Room messages ─────────────────────────────────────────────────────
+
+/// King invites agents to join a task room.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskInvite {
+    pub task_id: String,
+    pub task_type: String,
+    #[serde(default)]
+    pub payload: serde_json::Value,
+}
+
+/// King streams output data into a task room.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskOutput {
+    pub task_id: String,
+    pub request_id: String,
+    /// Source of output: `"pty"` or `"llm"`.
+    pub source: String,
+    pub delta: String,
+    pub chunk_index: u32,
+    #[serde(default)]
+    pub is_final: bool,
+}
+
+/// King requests evaluation of a completed task.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskEvaluate {
+    pub task_id: String,
+    pub task_type: String,
+    /// Accumulated output text (truncated if very large).
+    #[serde(default)]
+    pub output_summary: String,
+    #[serde(default)]
+    pub exit_code: Option<i32>,
+    #[serde(default)]
+    pub latency_ms: Option<u64>,
+    #[serde(default)]
+    pub metadata: serde_json::Value,
+}
+
+/// Evaluation agent reports a task summary.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskSummary {
+    pub task_id: String,
+    pub agent_id: String,
+    pub summary: String,
+    #[serde(default)]
+    pub score: Option<f64>,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    #[serde(default)]
+    pub evaluation: serde_json::Value,
+}
+
 pub mod events {
     pub const AGENT_REGISTER: &str = "agent:register";
     pub const AGENT_STATUS: &str = "agent:status";
@@ -358,9 +412,18 @@ pub mod events {
     pub const MEMORY_DELETE: &str = "memory:delete";
     pub const MEMORY_CHANGED: &str = "memory:changed";
 
+    // Task Room events
+    pub const TASK_INVITE: &str = "task:invite";
+    pub const TASK_JOIN: &str = "task:join";
+    pub const TASK_OUTPUT: &str = "task:output";
+    pub const TASK_EVALUATE: &str = "task:evaluate";
+    pub const TASK_SUMMARY: &str = "task:summary";
+    pub const TASK_LOG: &str = "task:log";
+
     // Rooms
     pub const ROOM_KERNEL: &str = "kernel";
     pub const ROOM_ROLE_PREFIX: &str = "role:";
+    pub const ROOM_TASK_PREFIX: &str = "task:";
 }
 
 #[cfg(test)]
