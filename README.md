@@ -223,12 +223,32 @@ pub struct ServerConfig {
     pub port: u16,
 }
 
+/// Which wire protocol the provider speaks.
+#[serde(rename_all = "snake_case")]
+pub enum ProviderType {
+    OpenAiCompatible,  // default — OpenAI, OpenRouter, Ollama, vLLM, etc.
+    Anthropic,         // Anthropic Messages API (different auth + request format)
+    Cursor,            // spawns `cursor-agent` CLI subprocess
+    ClaudeCode,        // spawns `claude` CLI subprocess in print mode
+    CodexCli,          // spawns `codex` CLI subprocess in exec mode
+}
+
 pub struct ProviderConfig {
     pub name: String,
     pub base_url: String,
-    pub api_key_env: String,   // name of environment variable holding the key
+    /// Multiple env-var names enable round-robin key pooling.
+    /// Leave empty for unauthenticated providers (e.g. local Ollama).
+    pub api_key_envs: Vec<String>,
     pub enabled: bool,
+    /// Wire protocol — defaults to OpenAiCompatible.
+    pub provider_type: ProviderType,
+    /// Extra HTTP headers sent on every request (e.g. OpenRouter's HTTP-Referer).
+    pub extra_headers: HashMap<String, String>,
     pub rate_limit: Option<RateLimitConfig>,
+    /// Known model IDs this provider supports.
+    /// API providers can also fetch from upstream /models;
+    /// CLI providers (cursor, claude-code, codex-cli) rely on this list exclusively.
+    pub models: Vec<String>,
 }
 
 pub struct RateLimitConfig {
@@ -243,7 +263,7 @@ pub struct AgentConfig {
 }
 ```
 
-`GatewayConfig` provides `from_toml(&str)` and `to_toml()` methods. `AgentConfig` provides `from_toml(&str)`.
+`GatewayConfig` provides `from_toml(&str)`, `to_toml()`, `from_json(&str)`, and `to_json()` methods. `AgentConfig` provides `from_toml(&str)`.
 
 ---
 
@@ -345,24 +365,61 @@ port = 8080
 [[providers]]
 name = "openai"
 base_url = "https://api.openai.com/v1"
-api_key_env = "OPENAI_API_KEY"
+api_key_envs = ["OPENAI_API_KEY"]
 enabled = true
+provider_type = "open_ai_compatible"
+models = ["gpt-4o", "gpt-4o-mini"]
 
 [[providers]]
 name = "anthropic"
 base_url = "https://api.anthropic.com/v1"
-api_key_env = "ANTHROPIC_API_KEY"
+api_key_envs = ["ANTHROPIC_API_KEY"]
 enabled = true
+provider_type = "anthropic"
+models = ["claude-sonnet-4-20250514"]
+
+[[providers]]
+name = "openrouter"
+base_url = "https://openrouter.ai/api/v1"
+api_key_envs = ["OPENROUTER_API_KEY"]
+enabled = true
+provider_type = "open_ai_compatible"
+
+[providers.extra_headers]
+"HTTP-Referer" = "https://github.com/ai-evo-agents"
+"X-Title" = "evo-gateway"
 
 [[providers]]
 name = "ollama"
 base_url = "http://localhost:11434/v1"
-api_key_env = "OLLAMA_API_KEY"
+api_key_envs = []
 enabled = true
+provider_type = "open_ai_compatible"
 
 [providers.rate_limit]
 requests_per_minute = 60
 burst_size = 10
+
+[[providers]]
+name = "codex-cli"
+base_url = ""
+api_key_envs = []
+enabled = false
+provider_type = "codex_cli"
+
+[[providers]]
+name = "cursor"
+base_url = ""
+api_key_envs = []
+enabled = false
+provider_type = "cursor"
+
+[[providers]]
+name = "claude-code"
+base_url = ""
+api_key_envs = []
+enabled = false
+provider_type = "claude_code"
 ```
 
 ### Agent Configuration (`agent.toml`)
@@ -418,7 +475,7 @@ Add `evo-common` as a dependency in `Cargo.toml`:
 
 ```toml
 [dependencies]
-evo-common = "0.2"
+evo-common = "0.7"
 ```
 
 ### Logging initialization

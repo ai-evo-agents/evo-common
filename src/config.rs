@@ -49,6 +49,12 @@ pub struct ProviderConfig {
     pub extra_headers: HashMap<String, String>,
     #[serde(default)]
     pub rate_limit: Option<RateLimitConfig>,
+    /// Known model IDs this provider supports.
+    /// For API providers the gateway can also fetch from upstream `/models`.
+    /// For CLI providers (cursor, claude-code, codex-cli) this is the only
+    /// way to declare available models since CLIs have no listing API.
+    #[serde(default)]
+    pub models: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -151,6 +157,7 @@ provider_type = "open_ai_compatible"
                 provider_type: ProviderType::OpenAiCompatible,
                 extra_headers: HashMap::new(),
                 rate_limit: None,
+                models: vec![],
             }],
         };
         let toml_str = config.to_toml().unwrap();
@@ -175,6 +182,7 @@ provider_type = "open_ai_compatible"
                     provider_type: ProviderType::OpenAiCompatible,
                     extra_headers: HashMap::new(),
                     rate_limit: None,
+                    models: vec![],
                 },
                 ProviderConfig {
                     name: "anthropic".into(),
@@ -184,6 +192,7 @@ provider_type = "open_ai_compatible"
                     provider_type: ProviderType::Anthropic,
                     extra_headers: HashMap::new(),
                     rate_limit: None,
+                    models: vec![],
                 },
             ],
         };
@@ -210,6 +219,7 @@ provider_type = "open_ai_compatible"
                 provider_type: ProviderType::ClaudeCode,
                 extra_headers: HashMap::new(),
                 rate_limit: None,
+                models: vec![],
             }],
         };
         let json_str = config.to_json().unwrap();
@@ -233,6 +243,7 @@ provider_type = "open_ai_compatible"
                 provider_type: ProviderType::CodexCli,
                 extra_headers: HashMap::new(),
                 rate_limit: None,
+                models: vec![],
             }],
         };
         let json_str = config.to_json().unwrap();
@@ -256,11 +267,53 @@ provider_type = "open_ai_compatible"
                 provider_type: ProviderType::Cursor,
                 extra_headers: HashMap::new(),
                 rate_limit: None,
+                models: vec![],
             }],
         };
         let json_str = config.to_json().unwrap();
         assert!(json_str.contains("\"cursor\""));
         let parsed = GatewayConfig::from_json(&json_str).unwrap();
         assert_eq!(parsed.providers[0].provider_type, ProviderType::Cursor);
+    }
+
+    #[test]
+    fn roundtrip_provider_models_field() {
+        let config = GatewayConfig {
+            server: ServerConfig {
+                host: "127.0.0.1".into(),
+                port: 8080,
+            },
+            providers: vec![ProviderConfig {
+                name: "openai".into(),
+                base_url: "https://api.openai.com/v1".into(),
+                api_key_envs: vec![],
+                enabled: true,
+                provider_type: ProviderType::OpenAiCompatible,
+                extra_headers: HashMap::new(),
+                rate_limit: None,
+                models: vec!["gpt-4o".into(), "gpt-4o-mini".into()],
+            }],
+        };
+        let json_str = config.to_json().unwrap();
+        assert!(json_str.contains("gpt-4o"));
+        let parsed = GatewayConfig::from_json(&json_str).unwrap();
+        assert_eq!(parsed.providers[0].models.len(), 2);
+        assert_eq!(parsed.providers[0].models[0], "gpt-4o");
+        assert_eq!(parsed.providers[0].models[1], "gpt-4o-mini");
+    }
+
+    #[test]
+    fn models_field_defaults_to_empty() {
+        // JSON without "models" field should deserialize to empty vec
+        let json_str = r#"{
+            "server": { "host": "127.0.0.1", "port": 8080 },
+            "providers": [{
+                "name": "test",
+                "base_url": "",
+                "enabled": true
+            }]
+        }"#;
+        let config = GatewayConfig::from_json(json_str).unwrap();
+        assert!(config.providers[0].models.is_empty());
     }
 }
