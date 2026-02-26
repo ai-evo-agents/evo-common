@@ -349,6 +349,7 @@ pub mod events {
     // Debug events
     pub const DEBUG_PROMPT: &str = "debug:prompt";
     pub const DEBUG_RESPONSE: &str = "debug:response";
+    pub const DEBUG_STREAM: &str = "debug:stream";
 
     // Memory events
     pub const MEMORY_STORE: &str = "memory:store";
