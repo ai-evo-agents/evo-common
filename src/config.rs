@@ -5,6 +5,14 @@ use std::collections::HashMap;
 pub struct GatewayConfig {
     pub server: ServerConfig,
     pub providers: Vec<ProviderConfig>,
+    /// Optional reliability configuration for retry/fallback behavior.
+    /// When absent, requests use single-attempt mode (current default).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reliability: Option<ReliabilityConfig>,
+    /// Optional hint-based model routing.
+    /// Maps hint names (e.g. "coding", "fast") to `provider:model` strings.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub routing: Option<RoutingConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -61,6 +69,46 @@ pub struct ProviderConfig {
 pub struct RateLimitConfig {
     pub requests_per_minute: u32,
     pub burst_size: u32,
+}
+
+/// Retry and fallback configuration for upstream provider requests.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReliabilityConfig {
+    /// Maximum retry attempts per provider before falling back (default: 3).
+    #[serde(default = "default_max_retries")]
+    pub max_retries: u32,
+    /// Base backoff in milliseconds for exponential backoff (default: 200).
+    #[serde(default = "default_base_backoff_ms")]
+    pub base_backoff_ms: u64,
+    /// Maximum backoff cap in milliseconds (default: 10000).
+    #[serde(default = "default_max_backoff_ms")]
+    pub max_backoff_ms: u64,
+    /// Ordered list of provider names to try on failure.
+    /// If empty, only the originally targeted provider is attempted.
+    #[serde(default)]
+    pub fallback_chain: Vec<String>,
+}
+
+fn default_max_retries() -> u32 {
+    3
+}
+fn default_base_backoff_ms() -> u64 {
+    200
+}
+fn default_max_backoff_ms() -> u64 {
+    10_000
+}
+
+/// Hint-based model routing configuration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RoutingConfig {
+    /// Maps hint names to `provider:model` strings.
+    /// Example: `{"coding": "anthropic:claude-opus-4-5", "fast": "openai:gpt-4o-mini"}`
+    #[serde(default)]
+    pub model_routes: HashMap<String, String>,
+    /// Default `provider:model` when no hint matches and no provider is specified.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_route: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -159,6 +207,8 @@ provider_type = "open_ai_compatible"
                 rate_limit: None,
                 models: vec![],
             }],
+            reliability: None,
+            routing: None,
         };
         let toml_str = config.to_toml().unwrap();
         let parsed = GatewayConfig::from_toml(&toml_str).unwrap();
@@ -195,6 +245,8 @@ provider_type = "open_ai_compatible"
                     models: vec![],
                 },
             ],
+            reliability: None,
+            routing: None,
         };
         let json_str = config.to_json().unwrap();
         let parsed = GatewayConfig::from_json(&json_str).unwrap();
@@ -221,6 +273,8 @@ provider_type = "open_ai_compatible"
                 rate_limit: None,
                 models: vec![],
             }],
+            reliability: None,
+            routing: None,
         };
         let json_str = config.to_json().unwrap();
         assert!(json_str.contains("\"claude_code\""));
@@ -245,6 +299,8 @@ provider_type = "open_ai_compatible"
                 rate_limit: None,
                 models: vec![],
             }],
+            reliability: None,
+            routing: None,
         };
         let json_str = config.to_json().unwrap();
         assert!(json_str.contains("\"codex_cli\""));
@@ -269,6 +325,8 @@ provider_type = "open_ai_compatible"
                 rate_limit: None,
                 models: vec![],
             }],
+            reliability: None,
+            routing: None,
         };
         let json_str = config.to_json().unwrap();
         assert!(json_str.contains("\"cursor\""));
@@ -293,6 +351,8 @@ provider_type = "open_ai_compatible"
                 rate_limit: None,
                 models: vec!["gpt-4o".into(), "gpt-4o-mini".into()],
             }],
+            reliability: None,
+            routing: None,
         };
         let json_str = config.to_json().unwrap();
         assert!(json_str.contains("gpt-4o"));
