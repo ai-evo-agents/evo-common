@@ -420,6 +420,9 @@ pub mod events {
     pub const TASK_SUMMARY: &str = "task:summary";
     pub const TASK_LOG: &str = "task:log";
 
+    // System info events
+    pub const KING_SYSTEM_INFO: &str = "king:system_info";
+
     // Rooms
     pub const ROOM_KERNEL: &str = "kernel";
     pub const ROOM_ROLE_PREFIX: &str = "role:";

@@ -200,6 +200,9 @@ pub mod events {
     pub const PIPELINE_NEXT: &str          = "pipeline:next";
     pub const PIPELINE_STAGE_RESULT: &str  = "pipeline:stage_result";
 
+    // System info
+    pub const KING_SYSTEM_INFO: &str  = "king:system_info";
+
     // Rooms
     pub const ROOM_KERNEL: &str      = "kernel";
     pub const ROOM_ROLE_PREFIX: &str  = "role:";
@@ -348,6 +351,7 @@ Log files are written to `{log_dir}/{component}.YYYY-MM-DD.log` in JSON format. 
 | `king:config_update` | king -> runner | `KingConfigUpdate` |
 | `pipeline:next` | king <-> runner | `PipelineNext` |
 | `pipeline:stage_result` | runner -> king | `PipelineStageResult` |
+| `king:system_info` | king -> runner | `SystemDiscovery` (JSON) |
 
 All payloads are JSON-serialized using `serde_json`. Enum variants use `snake_case` serialization by default; `HttpMethod` uses `UPPERCASE`.
 
