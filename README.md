@@ -322,7 +322,7 @@ pub enum HttpMethod {
 
 ### `logging` - Structured Logging
 
-Initializes `tracing` with dual output: JSON to a daily rolling log file and human-readable to stdout.
+Initializes `tracing` with dual output: JSON to a daily rolling log file and human-readable to stdout. When the `tracing-otel` feature is enabled, also exports spans to an OTLP HTTP endpoint.
 
 ```rust
 // Returns the log directory path.
@@ -333,9 +333,31 @@ pub fn log_dir() -> PathBuf
 // Returns a WorkerGuard that must be held for the lifetime of the process
 // to ensure buffered log lines are flushed before exit.
 pub fn init_logging(component: &str) -> WorkerGuard
+
+// Sets up logging with OpenTelemetry span export (tracing-otel feature only).
+// Exports spans via OTLP HTTP to `otlp_endpoint` (e.g. "http://localhost:3300/v1/traces").
+// Returns (WorkerGuard, OtelGuard) — both must be held for the process lifetime.
+#[cfg(feature = "tracing-otel")]
+pub fn init_logging_with_otel(component: &str, otlp_endpoint: &str) -> (WorkerGuard, OtelGuard)
 ```
 
 Log files are written to `{log_dir}/{component}.YYYY-MM-DD.log` in JSON format. Stdout output is plain text. The log level is controlled by the `RUST_LOG` environment variable (default: `info`).
+
+---
+
+### `tracing_context` - W3C Trace Propagation (feature: `tracing-otel`)
+
+Helpers for injecting and extracting OpenTelemetry trace context across service boundaries.
+
+```rust
+// Socket.IO payload propagation (HashMap carrier)
+pub fn inject_context(carrier: &mut HashMap<String, String>)
+pub fn extract_context(carrier: &HashMap<String, String>) -> Context
+
+// HTTP header propagation (W3C traceparent / tracestate)
+pub fn inject_http_headers(headers: &mut HeaderMap)
+pub fn extract_from_http_headers(headers: &HeaderMap) -> Context
+```
 
 ---
 
@@ -480,6 +502,9 @@ Add `evo-common` as a dependency in `Cargo.toml`:
 ```toml
 [dependencies]
 evo-common = "0.7"
+
+# With OpenTelemetry tracing export:
+evo-common = { version = "0.7", features = ["tracing-otel"] }
 ```
 
 ### Logging initialization
@@ -493,6 +518,23 @@ fn main() {
 
     tracing::info!("Component started");
     // ...
+}
+```
+
+### Logging with OpenTelemetry
+
+```rust
+use evo_common::logging;
+
+fn main() {
+    // Both guards must be held for the process lifetime
+    let (_log_guard, _otel_guard) = logging::init_logging_with_otel(
+        "my-component",
+        "http://localhost:3300/v1/traces",
+    );
+
+    tracing::info!("Component started");
+    // Spans are automatically exported to evo-king's OTLP receiver
 }
 ```
 
@@ -567,6 +609,10 @@ cargo check
 | `tracing` | 0.1 | Structured logging macros |
 | `tracing-subscriber` | 0.3 | Tracing output (JSON + stdout, env-filter) |
 | `tracing-appender` | 0.2 | Non-blocking rolling file appender |
+| `opentelemetry` | 0.31 | OTel API (optional, `tracing-otel` feature) |
+| `opentelemetry_sdk` | 0.31 | OTel SDK with batch exporter (optional) |
+| `opentelemetry-otlp` | 0.31 | OTLP HTTP exporter (optional) |
+| `tracing-opentelemetry` | 0.32 | Bridge between `tracing` and OTel SDK (optional) |
 
 ---
 
