@@ -234,6 +234,7 @@ pub enum ProviderType {
     Cursor,            // spawns `cursor-agent` CLI subprocess
     ClaudeCode,        // spawns `claude` CLI subprocess in print mode
     CodexCli,          // spawns `codex` CLI subprocess in exec mode
+    CodexAuth,         // OpenAI Responses API via OAuth/bearer token (direct HTTP)
 }
 
 pub struct ProviderConfig {
@@ -501,10 +502,10 @@ Add `evo-common` as a dependency in `Cargo.toml`:
 
 ```toml
 [dependencies]
-evo-common = "0.7"
+evo-common = "0.9"
 
 # With OpenTelemetry tracing export:
-evo-common = { version = "0.7", features = ["tracing-otel"] }
+evo-common = { version = "0.9", features = ["tracing-otel"] }
 ```
 
 ### Logging initialization
