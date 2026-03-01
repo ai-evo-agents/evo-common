@@ -36,6 +36,8 @@ pub enum ProviderType {
     ClaudeCode,
     /// Codex CLI — spawns `codex` CLI subprocess in exec mode.
     CodexCli,
+    /// OpenAI Codex Responses API — direct HTTP with OAuth/bearer token auth.
+    CodexAuth,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -360,6 +362,32 @@ provider_type = "open_ai_compatible"
         assert_eq!(parsed.providers[0].models.len(), 2);
         assert_eq!(parsed.providers[0].models[0], "gpt-4o");
         assert_eq!(parsed.providers[0].models[1], "gpt-4o-mini");
+    }
+
+    #[test]
+    fn roundtrip_provider_type_codex_auth() {
+        let config = GatewayConfig {
+            server: ServerConfig {
+                host: "127.0.0.1".into(),
+                port: 8080,
+            },
+            providers: vec![ProviderConfig {
+                name: "codex-auth".into(),
+                base_url: "https://api.openai.com/v1".into(),
+                api_key_envs: vec!["OPENAI_API_KEY".into()],
+                enabled: false,
+                provider_type: ProviderType::CodexAuth,
+                extra_headers: HashMap::new(),
+                rate_limit: None,
+                models: vec![],
+            }],
+            reliability: None,
+            routing: None,
+        };
+        let json_str = config.to_json().unwrap();
+        assert!(json_str.contains("\"codex_auth\""));
+        let parsed = GatewayConfig::from_json(&json_str).unwrap();
+        assert_eq!(parsed.providers[0].provider_type, ProviderType::CodexAuth);
     }
 
     #[test]
