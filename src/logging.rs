@@ -133,16 +133,22 @@ pub fn init_logging_with_otel(component: &str, otlp_endpoint: &str) -> (WorkerGu
 mod tests {
     use super::*;
 
+    // Serialise env-var mutation tests so parallel test threads don't race.
+    static ENV_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     #[test]
     fn default_log_dir() {
+        let _guard = ENV_MUTEX.lock().unwrap();
         unsafe { env::remove_var(ENV_LOG_DIR) };
         assert_eq!(log_dir(), PathBuf::from("./logs"));
     }
 
     #[test]
     fn custom_log_dir() {
+        let _guard = ENV_MUTEX.lock().unwrap();
         unsafe { env::set_var(ENV_LOG_DIR, "/tmp/evo-test-logs") };
-        assert_eq!(log_dir(), PathBuf::from("/tmp/evo-test-logs"));
+        let result = log_dir();
         unsafe { env::remove_var(ENV_LOG_DIR) };
+        assert_eq!(result, PathBuf::from("/tmp/evo-test-logs"));
     }
 }
