@@ -38,6 +38,10 @@ pub enum ProviderType {
     CodexCli,
     /// OpenAI Codex Responses API — direct HTTP with OAuth/bearer token auth.
     CodexAuth,
+    /// Google Generative AI (Gemini) — native generateContent API with query-param auth.
+    Google,
+    /// GitHub Copilot — token exchange flow + OpenAI-compatible wire format.
+    GithubCopilot,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -65,6 +69,36 @@ pub struct ProviderConfig {
     /// way to declare available models since CLIs have no listing API.
     #[serde(default)]
     pub models: Vec<String>,
+    /// Optional rich metadata per model (keyed by model ID).
+    /// When present, `/v1/models` responses include context_window, max_tokens, etc.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_metadata: Option<HashMap<String, ModelMetadata>>,
+}
+
+/// Rich metadata for a single model — context window, pricing, capabilities.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelMetadata {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_window: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_tokens: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_types: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cost: Option<ModelCost>,
+}
+
+/// Per-model pricing in USD per 1M tokens.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelCost {
+    pub input: f64,
+    pub output: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_read: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_write: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -208,6 +242,7 @@ provider_type = "open_ai_compatible"
                 extra_headers: HashMap::new(),
                 rate_limit: None,
                 models: vec![],
+                model_metadata: None,
             }],
             reliability: None,
             routing: None,
@@ -235,6 +270,7 @@ provider_type = "open_ai_compatible"
                     extra_headers: HashMap::new(),
                     rate_limit: None,
                     models: vec![],
+                    model_metadata: None,
                 },
                 ProviderConfig {
                     name: "anthropic".into(),
@@ -245,6 +281,7 @@ provider_type = "open_ai_compatible"
                     extra_headers: HashMap::new(),
                     rate_limit: None,
                     models: vec![],
+                    model_metadata: None,
                 },
             ],
             reliability: None,
@@ -274,6 +311,7 @@ provider_type = "open_ai_compatible"
                 extra_headers: HashMap::new(),
                 rate_limit: None,
                 models: vec![],
+                model_metadata: None,
             }],
             reliability: None,
             routing: None,
@@ -300,6 +338,7 @@ provider_type = "open_ai_compatible"
                 extra_headers: HashMap::new(),
                 rate_limit: None,
                 models: vec![],
+                model_metadata: None,
             }],
             reliability: None,
             routing: None,
@@ -326,6 +365,7 @@ provider_type = "open_ai_compatible"
                 extra_headers: HashMap::new(),
                 rate_limit: None,
                 models: vec![],
+                model_metadata: None,
             }],
             reliability: None,
             routing: None,
@@ -352,6 +392,7 @@ provider_type = "open_ai_compatible"
                 extra_headers: HashMap::new(),
                 rate_limit: None,
                 models: vec!["gpt-4o".into(), "gpt-4o-mini".into()],
+                model_metadata: None,
             }],
             reliability: None,
             routing: None,
@@ -380,6 +421,7 @@ provider_type = "open_ai_compatible"
                 extra_headers: HashMap::new(),
                 rate_limit: None,
                 models: vec![],
+                model_metadata: None,
             }],
             reliability: None,
             routing: None,
@@ -403,5 +445,128 @@ provider_type = "open_ai_compatible"
         }"#;
         let config = GatewayConfig::from_json(json_str).unwrap();
         assert!(config.providers[0].models.is_empty());
+    }
+
+    #[test]
+    fn roundtrip_provider_type_google() {
+        let config = GatewayConfig {
+            server: ServerConfig {
+                host: "127.0.0.1".into(),
+                port: 8080,
+            },
+            providers: vec![ProviderConfig {
+                name: "google".into(),
+                base_url: "https://generativelanguage.googleapis.com".into(),
+                api_key_envs: vec!["GEMINI_API_KEY".into()],
+                enabled: false,
+                provider_type: ProviderType::Google,
+                extra_headers: HashMap::new(),
+                rate_limit: None,
+                models: vec!["gemini-2.5-pro".into()],
+                model_metadata: None,
+            }],
+            reliability: None,
+            routing: None,
+        };
+        let json_str = config.to_json().unwrap();
+        assert!(json_str.contains("\"google\""));
+        let parsed = GatewayConfig::from_json(&json_str).unwrap();
+        assert_eq!(parsed.providers[0].provider_type, ProviderType::Google);
+    }
+
+    #[test]
+    fn roundtrip_provider_type_github_copilot() {
+        let config = GatewayConfig {
+            server: ServerConfig {
+                host: "127.0.0.1".into(),
+                port: 8080,
+            },
+            providers: vec![ProviderConfig {
+                name: "github-copilot".into(),
+                base_url: String::new(),
+                api_key_envs: vec!["COPILOT_GITHUB_TOKEN".into()],
+                enabled: false,
+                provider_type: ProviderType::GithubCopilot,
+                extra_headers: HashMap::new(),
+                rate_limit: None,
+                models: vec!["gpt-4o".into()],
+                model_metadata: None,
+            }],
+            reliability: None,
+            routing: None,
+        };
+        let json_str = config.to_json().unwrap();
+        assert!(json_str.contains("\"github_copilot\""));
+        let parsed = GatewayConfig::from_json(&json_str).unwrap();
+        assert_eq!(
+            parsed.providers[0].provider_type,
+            ProviderType::GithubCopilot
+        );
+    }
+
+    #[test]
+    fn roundtrip_model_metadata() {
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            "gpt-4o".to_string(),
+            ModelMetadata {
+                context_window: Some(128_000),
+                max_tokens: Some(16_384),
+                reasoning: Some(false),
+                input_types: Some(vec!["text".into(), "image".into()]),
+                cost: Some(ModelCost {
+                    input: 2.50,
+                    output: 10.00,
+                    cache_read: None,
+                    cache_write: None,
+                }),
+            },
+        );
+        let config = GatewayConfig {
+            server: ServerConfig {
+                host: "127.0.0.1".into(),
+                port: 8080,
+            },
+            providers: vec![ProviderConfig {
+                name: "openai".into(),
+                base_url: "https://api.openai.com/v1".into(),
+                api_key_envs: vec![],
+                enabled: true,
+                provider_type: ProviderType::OpenAiCompatible,
+                extra_headers: HashMap::new(),
+                rate_limit: None,
+                models: vec!["gpt-4o".into()],
+                model_metadata: Some(metadata),
+            }],
+            reliability: None,
+            routing: None,
+        };
+        let json_str = config.to_json().unwrap();
+        assert!(json_str.contains("context_window"));
+        assert!(json_str.contains("128000"));
+        let parsed = GatewayConfig::from_json(&json_str).unwrap();
+        let meta = parsed.providers[0]
+            .model_metadata
+            .as_ref()
+            .unwrap()
+            .get("gpt-4o")
+            .unwrap();
+        assert_eq!(meta.context_window, Some(128_000));
+        assert_eq!(meta.reasoning, Some(false));
+        assert_eq!(meta.cost.as_ref().unwrap().input, 2.50);
+    }
+
+    #[test]
+    fn model_metadata_defaults_to_none() {
+        let json_str = r#"{
+            "server": { "host": "127.0.0.1", "port": 8080 },
+            "providers": [{
+                "name": "test",
+                "base_url": "",
+                "enabled": true
+            }]
+        }"#;
+        let config = GatewayConfig::from_json(json_str).unwrap();
+        assert!(config.providers[0].model_metadata.is_none());
     }
 }

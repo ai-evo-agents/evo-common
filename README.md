@@ -235,6 +235,8 @@ pub enum ProviderType {
     ClaudeCode,        // spawns `claude` CLI subprocess in print mode
     CodexCli,          // spawns `codex` CLI subprocess in exec mode
     CodexAuth,         // OpenAI Responses API via OAuth/bearer token (direct HTTP)
+    Google,            // Google Generative AI (Gemini native API)
+    GithubCopilot,     // GitHub Copilot (token exchange + OpenAI-compatible)
 }
 
 pub struct ProviderConfig {
@@ -253,6 +255,23 @@ pub struct ProviderConfig {
     /// API providers can also fetch from upstream /models;
     /// CLI providers (cursor, claude-code, codex-cli) rely on this list exclusively.
     pub models: Vec<String>,
+    /// Optional per-model metadata (context window, cost, reasoning capabilities).
+    pub model_metadata: Option<HashMap<String, ModelMetadata>>,
+}
+
+pub struct ModelMetadata {
+    pub context_window: Option<u32>,
+    pub max_tokens: Option<u32>,
+    pub reasoning: Option<bool>,
+    pub input_types: Option<Vec<String>>,  // e.g. ["text", "image"]
+    pub cost: Option<ModelCost>,
+}
+
+pub struct ModelCost {
+    pub input: f64,   // USD per million input tokens
+    pub output: f64,  // USD per million output tokens
+    pub cache_read: Option<f64>,
+    pub cache_write: Option<f64>,
 }
 
 pub struct RateLimitConfig {
@@ -502,10 +521,10 @@ Add `evo-common` as a dependency in `Cargo.toml`:
 
 ```toml
 [dependencies]
-evo-common = "0.9"
+evo-common = "0.10"
 
 # With OpenTelemetry tracing export:
-evo-common = { version = "0.9", features = ["tracing-otel"] }
+evo-common = { version = "0.10", features = ["tracing-otel"] }
 ```
 
 ### Logging initialization
