@@ -126,6 +126,8 @@ pub enum TaskStatus {
     Completed,
     Failed,
     Cancelled,
+    Recovering,
+    Decomposed,
 }
 
 // ─── Task management messages ────────────────────────────────────────────────
@@ -380,6 +382,89 @@ pub struct TaskSummary {
     pub evaluation: serde_json::Value,
 }
 
+// ─── Error recovery & task decomposition ─────────────────────────────────────
+
+/// Recommendation from evaluation agent on how to handle a pipeline failure.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ErrorRecoveryAction {
+    Retry,
+    Decompose,
+    Skip,
+    Abort,
+}
+
+/// Shared subtask specification used by decompose and recovery responses.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskSubtaskSpec {
+    pub task_type: String,
+    pub summary: String,
+    #[serde(default = "default_empty_object")]
+    pub payload: serde_json::Value,
+}
+
+/// King requests error analysis from evaluation agent after a pipeline stage failure.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ErrorRecoveryRequest {
+    pub request_id: String,
+    pub run_id: String,
+    pub task_id: String,
+    pub failed_stage: String,
+    pub error_message: String,
+    #[serde(default = "default_empty_object")]
+    pub stage_output: serde_json::Value,
+    #[serde(default)]
+    pub retry_count: u32,
+    #[serde(default)]
+    pub task_summary: String,
+}
+
+/// Evaluation agent's recommendation for error recovery.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ErrorRecoveryResponse {
+    pub request_id: String,
+    pub run_id: String,
+    pub task_id: String,
+    pub action: ErrorRecoveryAction,
+    #[serde(default = "default_empty_object")]
+    pub params: serde_json::Value,
+    #[serde(default)]
+    pub reasoning: String,
+}
+
+/// King requests task decomposition from evaluation agent.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskDecomposeRequest {
+    pub request_id: String,
+    #[serde(default)]
+    pub run_id: String,
+    pub task_id: String,
+    pub task_type: String,
+    pub summary: String,
+    #[serde(default = "default_empty_object")]
+    pub payload: serde_json::Value,
+    #[serde(default = "default_empty_object")]
+    pub context: serde_json::Value,
+    /// Trigger source: "manual", "auto_preflight", or "recovery"
+    #[serde(default)]
+    pub trigger: String,
+}
+
+/// Evaluation agent's decomposition response.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskDecomposeResponse {
+    pub request_id: String,
+    #[serde(default)]
+    pub run_id: String,
+    pub task_id: String,
+    #[serde(default)]
+    pub should_decompose: bool,
+    #[serde(default)]
+    pub reasoning: String,
+    #[serde(default)]
+    pub subtasks: Vec<TaskSubtaskSpec>,
+}
+
 pub mod events {
     pub const AGENT_REGISTER: &str = "agent:register";
     pub const AGENT_STATUS: &str = "agent:status";
@@ -419,6 +504,14 @@ pub mod events {
     pub const TASK_EVALUATE: &str = "task:evaluate";
     pub const TASK_SUMMARY: &str = "task:summary";
     pub const TASK_LOG: &str = "task:log";
+
+    // Error recovery events
+    pub const ERROR_RECOVERY_REQUEST: &str = "error:recovery_request";
+    pub const ERROR_RECOVERY_RESPONSE: &str = "error:recovery_response";
+
+    // Task decomposition events
+    pub const TASK_DECOMPOSE: &str = "task:decompose";
+    pub const TASK_DECOMPOSE_RESULT: &str = "task:decompose_result";
 
     // System info events
     pub const KING_SYSTEM_INFO: &str = "king:system_info";
@@ -641,5 +734,61 @@ mod tests {
         let de: MemoryChanged = serde_json::from_str(&json).unwrap();
         assert_eq!(de.action, "created");
         assert_eq!(de.memory_id.unwrap(), "mem-001");
+    }
+
+    #[test]
+    fn serialize_error_recovery_action() {
+        let action = ErrorRecoveryAction::Retry;
+        let json = serde_json::to_string(&action).unwrap();
+        assert_eq!(json, r#""retry""#);
+        let de: ErrorRecoveryAction = serde_json::from_str(&json).unwrap();
+        assert_eq!(de, ErrorRecoveryAction::Retry);
+    }
+
+    #[test]
+    fn serialize_task_status_recovering() {
+        let status = TaskStatus::Recovering;
+        let json = serde_json::to_string(&status).unwrap();
+        assert_eq!(json, r#""recovering""#);
+        let de: TaskStatus = serde_json::from_str(&json).unwrap();
+        assert_eq!(de, TaskStatus::Recovering);
+    }
+
+    #[test]
+    fn serialize_task_decompose_request() {
+        let req = TaskDecomposeRequest {
+            request_id: "req-001".into(),
+            run_id: "run-001".into(),
+            task_id: "task-001".into(),
+            task_type: "pipeline".into(),
+            summary: "Test task".into(),
+            payload: serde_json::json!({"key": "value"}),
+            context: serde_json::json!({}),
+            trigger: "manual".into(),
+        };
+        let json = serde_json::to_string(&req).unwrap();
+        let de: TaskDecomposeRequest = serde_json::from_str(&json).unwrap();
+        assert_eq!(de.request_id, "req-001");
+        assert_eq!(de.trigger, "manual");
+    }
+
+    #[test]
+    fn deserialize_error_recovery_response() {
+        let json = r#"{"request_id":"r1","run_id":"run1","task_id":"t1","action":"decompose","params":{},"reasoning":"too complex"}"#;
+        let resp: ErrorRecoveryResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(resp.action, ErrorRecoveryAction::Decompose);
+        assert_eq!(resp.reasoning, "too complex");
+    }
+
+    #[test]
+    fn serialize_subtask_spec() {
+        let spec = TaskSubtaskSpec {
+            task_type: "test".into(),
+            summary: "Run tests".into(),
+            payload: serde_json::json!({"target": "all"}),
+        };
+        let json = serde_json::to_string(&spec).unwrap();
+        let de: TaskSubtaskSpec = serde_json::from_str(&json).unwrap();
+        assert_eq!(de.task_type, "test");
     }
 }

@@ -173,6 +173,24 @@ pub enum PipelineRunStatus {
     TimedOut,
 }
 
+#[serde(rename_all = "snake_case")]
+pub enum TaskStatus {
+    Pending,
+    Running,
+    Completed,
+    Failed,
+    Recovering,   // awaiting error recovery decision
+    Decomposed,   // split into subtasks
+}
+
+#[serde(rename_all = "snake_case")]
+pub enum ErrorRecoveryAction {
+    Retry,
+    Decompose,
+    Skip,
+    Abort,
+}
+
 // Agent reports completion of a pipeline stage back to king
 pub struct PipelineStageResult {
     pub run_id: String,
@@ -202,6 +220,12 @@ pub mod events {
 
     // System info
     pub const KING_SYSTEM_INFO: &str  = "king:system_info";
+
+    // Error recovery & task decomposition
+    pub const ERROR_RECOVERY_REQUEST: &str  = "error:recovery_request";
+    pub const ERROR_RECOVERY_RESPONSE: &str = "error:recovery_response";
+    pub const TASK_DECOMPOSE: &str          = "task:decompose";
+    pub const TASK_DECOMPOSE_RESULT: &str   = "task:decompose_result";
 
     // Rooms
     pub const ROOM_KERNEL: &str      = "kernel";
@@ -394,6 +418,10 @@ pub fn extract_from_http_headers(headers: &HeaderMap) -> Context
 | `pipeline:next` | king <-> runner | `PipelineNext` |
 | `pipeline:stage_result` | runner -> king | `PipelineStageResult` |
 | `king:system_info` | king -> runner | `SystemDiscovery` (JSON) |
+| `error:recovery_request` | king -> runner | `ErrorRecoveryRequest` |
+| `error:recovery_response` | runner -> king | `ErrorRecoveryResponse` |
+| `task:decompose` | king -> runner | `TaskDecomposeRequest` |
+| `task:decompose_result` | runner -> king | `TaskDecomposeResponse` |
 
 All payloads are JSON-serialized using `serde_json`. Enum variants use `snake_case` serialization by default; `HttpMethod` uses `UPPERCASE`.
 
@@ -521,10 +549,10 @@ Add `evo-common` as a dependency in `Cargo.toml`:
 
 ```toml
 [dependencies]
-evo-common = "0.10"
+evo-common = "0.11"
 
 # With OpenTelemetry tracing export:
-evo-common = { version = "0.10", features = ["tracing-otel"] }
+evo-common = { version = "0.11", features = ["tracing-otel"] }
 ```
 
 ### Logging initialization
